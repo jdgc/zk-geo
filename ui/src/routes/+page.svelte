@@ -2,14 +2,61 @@
 import { onMount } from "svelte";
 import { fetchAccount, isReady, Mina, PublicKey, setGraphqlEndpoint } from 'snarkyjs';
 import { writable } from "svelte/store";
-import { Add } from "../../../contracts/build/src/Add";
+/* import { Add } from "../../../contracts/build/src/Add"; */
+import { Add } from 'geo3';
+
+const zkAppAddress = 'B62qpHY3Q9do7SycwCeXD9Qst2Rqa6PRdQv4BLRxG4NqGZYpRCndLRW'
 
 let zkApp = writable();
 
-onMount(async () => {
-    await isReady;  
+const updateState = async () => {
+  console.log('entering function')
+  const contractAddr = PublicKey.fromBase58(zkAppAddress);
 
-    const { Add } = await import('../../../contracts/build/src/')
+  console.log('building tx')
+  const tx = await Mina.transaction(async () => {
+      let _account = await fetchAccount({ publicKey: zkAppAddress })
+      const zkAdd = new Add(contractAddr);
+      zkAdd.update();
+  })
+
+  // attach proof to tx
+  await tx.prove();
+
+  const Berkeley = Mina.Network(
+     'https://proxy.berkeley.minaexplorer.com/graphql'
+   );
+  Mina.setActiveInstance(Berkeley);
+
+  try {
+    const { hash } = await window.mina.sendTransaction({
+        transaction: tx.toJSON(),
+    })
+
+    console.log(hash);
+
+    if (hash !== undefined) {
+      console.log(`
+    Success! Update transaction sent.
+
+    Your smart contract state will be updated
+    as soon as the transaction is included in a block:
+    https://berkeley.minaexplorer.com/transaction/${hash}
+    `);
+    }
+  } catch (e) {
+    alert(tx.toJSON());
+    console.error(e)
+  }
+}
+
+let accounts = writable();
+
+onMount(async () => {
+    await isReady;
+
+    accounts.set(await window.mina.requestAccounts());
+
     // Update this to use the address (public key) for your zkApp account
     // To try it out, you can try this address for an example "Add" smart contract that we've deployed to
     // Berkeley Testnet B62qisn669bZqsh8yMWkNyCA7RvjrL6gfdr3TQxymDHNhTc97xE5kNV
@@ -27,7 +74,6 @@ onMount(async () => {
     zkApp.set(new Add(PublicKey.fromBase58(zkAppAddress)))
     let account = await fetchAccount({ publicKey: zkAppAddress })
     console.log(account.account?.balance.toString());
-    console.log((await zkApp.num.fetch())?.toString());
     });
 </script>
 
@@ -39,4 +85,8 @@ onMount(async () => {
         <p>{stateNum.toString()}</p>
     {/await}
 {/if}
-<button>increment state</button>
+
+{#if $accounts}
+<p>{`connected account: ${$accounts}`}</p>
+{/if}
+<button on:click={updateState}>increment state</button>

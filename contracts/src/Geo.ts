@@ -1,4 +1,11 @@
-import { Field, SmartContract, state, State, method } from 'snarkyjs';
+import {
+  Field,
+  SmartContract,
+  PublicKey,
+  state,
+  State,
+  method,
+} from 'snarkyjs';
 
 /**
  * Geo
@@ -10,13 +17,32 @@ export class Geo extends SmartContract {
   @state(Field) maxLat = State<Field>();
   @state(Field) maxLng = State<Field>();
 
+  events = {
+    attended: PublicKey,
+  };
+
   init() {
     super.init();
     // initial values - Tokyo
-    this.minLat.set(Field(35.58));
-    this.minLng.set(Field(139.56));
-    this.maxLat.set(Field(35.74));
-    this.maxLng.set(Field(139.87));
+    this.minLat.set(Field(3558));
+    this.minLng.set(Field(13956));
+    this.maxLat.set(Field(3574));
+    this.maxLng.set(Field(13987));
+  }
+
+  // note: lat and long should be ints (2 decimal point precision * 100)
+  @method validateCoords(user: PublicKey, lat: Field, lng: Field) {
+    this.minLat.assertEquals(this.minLat.get());
+    this.minLng.assertEquals(this.minLng.get());
+    this.maxLng.assertEquals(this.maxLng.get());
+    this.maxLat.assertEquals(this.maxLat.get());
+
+    lat.assertGreaterThanOrEqual(this.minLat.get());
+    lng.assertGreaterThanOrEqual(this.minLng.get());
+    lat.assertLessThanOrEqual(this.maxLat.get());
+    lng.assertLessThanOrEqual(this.maxLng.get());
+
+    this.emitEvent('attended', user);
   }
 
   @method updateTarget(
